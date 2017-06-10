@@ -17,7 +17,7 @@ import android.view.inputmethod.InputMethodManager;
 import android.widget.EditText;
 import android.widget.Toast;
 import qsbk.app.play.common.Constants;
-import qsbk.app.play.AGApplication;
+import qsbk.app.play.AppController;
 import qsbk.app.play.BuildConfig;
 import qsbk.app.play.model.ConstantApp;
 import qsbk.app.play.model.EngineConfig;
@@ -126,25 +126,25 @@ public abstract class BaseActivity extends AppCompatActivity {
         }
 
         if (Manifest.permission.CAMERA.equals(permission)) {
-            ((AGApplication) getApplication()).initWorkerThread();
+            ((AppController) getApplication()).initWorkerThread();
         }
         return true;
     }
 
     protected RtcEngine rtcEngine() {
-        return ((AGApplication) getApplication()).getWorkerThread().getRtcEngine();
+        return ((AppController) getApplication()).getWorkerThread().getRtcEngine();
     }
 
     protected final WorkerThread worker() {
-        return ((AGApplication) getApplication()).getWorkerThread();
+        return ((AppController) getApplication()).getWorkerThread();
     }
 
     protected final EngineConfig config() {
-        return ((AGApplication) getApplication()).getWorkerThread().getEngineConfig();
+        return ((AppController) getApplication()).getWorkerThread().getEngineConfig();
     }
 
     protected final MyEngineEventHandler event() {
-        return ((AGApplication) getApplication()).getWorkerThread().eventHandler();
+        return ((AppController) getApplication()).getWorkerThread().eventHandler();
     }
 
     public final void showLongToast(final String msg) {
@@ -174,7 +174,7 @@ public abstract class BaseActivity extends AppCompatActivity {
                 if (grantResults.length > 0
                         && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                     checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE, ConstantApp.PERMISSION_REQ_ID_WRITE_EXTERNAL_STORAGE);
-                    ((AGApplication) getApplication()).initWorkerThread();
+                    ((AppController) getApplication()).initWorkerThread();
                 } else {
                     finish();
                 }

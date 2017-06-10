@@ -1,11 +1,25 @@
 package qsbk.app.play;
 
 import android.app.Application;
+
+import com.blankj.utilcode.util.Utils;
+
 import qsbk.app.play.model.WorkerThread;
 
-public class AGApplication extends Application {
+public class AppController extends Application {
+
+    private static AppController mInstance;
 
     private WorkerThread mWorkerThread;
+
+    @Override
+    public void onCreate() {
+        super.onCreate();
+        mInstance = this;
+
+        // init it in the function of onCreate in ur Application
+        Utils.init(getApplicationContext());
+    }
 
     public synchronized void initWorkerThread() {
         if (mWorkerThread == null) {
@@ -28,5 +42,9 @@ public class AGApplication extends Application {
             e.printStackTrace();
         }
         mWorkerThread = null;
+    }
+
+    public static AppController instance() {
+        return mInstance;
     }
 }

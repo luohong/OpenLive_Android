@@ -18,17 +18,15 @@ import android.widget.ImageView;
 import android.widget.RelativeLayout;
 import android.widget.TextView;
 
+import com.blankj.utilcode.util.PhoneUtils;
+import com.google.gson.Gson;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.HashMap;
 import java.util.concurrent.TimeUnit;
 
-import qsbk.app.play.R;
-import qsbk.app.play.model.AGEventHandler;
-import qsbk.app.play.model.ConstantApp;
-import qsbk.app.play.model.VideoStatusData;
-import io.agora.rtc.Constants;
 import io.agora.rtc.RtcEngine;
 import io.agora.rtc.video.VideoCanvas;
 import okhttp3.OkHttpClient;
@@ -37,6 +35,14 @@ import okhttp3.Response;
 import okhttp3.WebSocket;
 import okhttp3.WebSocketListener;
 import okio.ByteString;
+import qsbk.app.play.R;
+import qsbk.app.play.model.AGEventHandler;
+import qsbk.app.play.model.ConstantApp;
+import qsbk.app.play.model.VideoStatusData;
+import qsbk.app.play.websocket.model.BaseMessage;
+import qsbk.app.play.common.Constants;
+import qsbk.app.play.websocket.model.MatchProgressMessage;
+import qsbk.app.play.websocket.model.PerformMessage;
 
 public class LiveRoomActivity extends BaseActivity implements AGEventHandler {
 
@@ -47,6 +53,15 @@ public class LiveRoomActivity extends BaseActivity implements AGEventHandler {
     private RelativeLayout mSmallVideoViewDock;
 
     private final HashMap<Integer, SurfaceView> mUidsList = new HashMap<>(); // uid = 0 || uid == EngineConfig.mUid
+
+    private TextView tvMatchProgress;
+
+    private Gson mGson = new Gson();
+
+    private ImageView btnSwitchClientRole;
+    private ImageView btnSwitchCamera;
+    private ImageView btnMicrophoneMute;
+    private Handler mHandler;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -65,7 +80,7 @@ public class LiveRoomActivity extends BaseActivity implements AGEventHandler {
     }
 
     private boolean isBroadcaster(int cRole) {
-        return cRole == Constants.CLIENT_ROLE_BROADCASTER;
+        return cRole == io.agora.rtc.Constants.CLIENT_ROLE_BROADCASTER;
     }
 
     private boolean isBroadcaster() {
@@ -74,6 +89,7 @@ public class LiveRoomActivity extends BaseActivity implements AGEventHandler {
 
     @Override
     protected void initUIandEvent() {
+        mHandler = new Handler();
         event().addEventHandler(this);
 
         Intent i = getIntent();
@@ -104,9 +120,9 @@ public class LiveRoomActivity extends BaseActivity implements AGEventHandler {
             }
         });
 
-        ImageView button1 = (ImageView) findViewById(R.id.btn_1);
-        ImageView button2 = (ImageView) findViewById(R.id.btn_2);
-        ImageView button3 = (ImageView) findViewById(R.id.btn_3);
+        btnSwitchClientRole = (ImageView) findViewById(R.id.btn_1);
+        btnSwitchCamera = (ImageView) findViewById(R.id.btn_2);
+        btnMicrophoneMute = (ImageView) findViewById(R.id.btn_3);
 
         if (isBroadcaster(cRole)) {
             SurfaceView surfaceV = RtcEngine.CreateRendererView(getApplicationContext());
@@ -118,15 +134,17 @@ public class LiveRoomActivity extends BaseActivity implements AGEventHandler {
 
             mGridVideoViewContainer.initViewContainer(getApplicationContext(), 0, mUidsList); // first is now full view
             worker().preview(true, surfaceV, 0);
-            broadcasterUI(button1, button2, button3);
+            broadcasterUI();
         } else {
-            audienceUI(button1, button2, button3);
+            audienceUI();
         }
 
         worker().joinChannel(roomName, config().mUid);
 
         TextView textRoomName = (TextView) findViewById(R.id.room_name);
         textRoomName.setText(roomName);
+
+        tvMatchProgress = (TextView) findViewById(R.id.tv_match_progress);
 
         connectWebsocket();
     }
@@ -138,8 +156,10 @@ public class LiveRoomActivity extends BaseActivity implements AGEventHandler {
                 .connectTimeout(5000, TimeUnit.MILLISECONDS)
                 .build();
         //构造request对象
+        final String uid = PhoneUtils.getIMEI();
         Request request = new Request.Builder()
-                .url("ws://172.16.0.109:8080/PlayWithMe/websocket")
+//                .url("ws://172.16.0.109:8080/Play/websocket?uid=" + uid)
+                .url("ws://192.168.199.239:8080/Play/websocket?uid=" + uid)
                 .build();
         //new 一个websocket调用对象并建立连接
         client.newWebSocket(request, new WebSocketListener() {
@@ -157,11 +177,34 @@ public class LiveRoomActivity extends BaseActivity implements AGEventHandler {
             }
 
             @Override
-            public void onMessage(final WebSocket webSocket, String message) {
+            public void onMessage(final WebSocket webSocket, final String message) {
                 //打印一些内容
                 String string = message;
                 Log.d("websocket", "client onMessage");
                 Log.d("websocket", "message:" + string);
+                mHandler.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        BaseMessage baseMsg = mGson.fromJson(message, BaseMessage.class);
+                        if (baseMsg != null) {
+                            switch (baseMsg.type) {
+                                case Constants.MessageType.MATCH_PROGRESS:
+                                    MatchProgressMessage progressMsg = mGson.fromJson(message, MatchProgressMessage.class);
+                                    tvMatchProgress.setVisibility(View.VISIBLE);
+                                    tvMatchProgress.setText(String.format("已匹配 %d/%d", progressMsg.progress, progressMsg.total));
+                                    break;
+                                case Constants.MessageType.GAME_START:
+                                    tvMatchProgress.setVisibility(View.GONE);
+                                    break;
+                                case Constants.MessageType.PERFORM:
+                                    PerformMessage performMsg = mGson.fromJson(message, PerformMessage.class);
+
+                                    doSwitchToBroadcaster(performMsg.who.equals(uid));
+                                    break;
+                            }
+                        }
+                    }
+                });
             }
 
             @Override
@@ -196,9 +239,9 @@ public class LiveRoomActivity extends BaseActivity implements AGEventHandler {
 //        client.dispatcher().executorService().shutdown();
     }
 
-    private void broadcasterUI(ImageView button1, ImageView button2, ImageView button3) {
-        button1.setTag(true);
-        button1.setOnClickListener(new View.OnClickListener() {
+    private void broadcasterUI() {
+        btnSwitchClientRole.setTag(true);
+        btnSwitchClientRole.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 Object tag = v.getTag();
@@ -209,16 +252,16 @@ public class LiveRoomActivity extends BaseActivity implements AGEventHandler {
                 }
             }
         });
-        button1.setColorFilter(getResources().getColor(R.color.agora_blue), PorterDuff.Mode.MULTIPLY);
+        btnSwitchClientRole.setColorFilter(getResources().getColor(R.color.agora_blue), PorterDuff.Mode.MULTIPLY);
 
-        button2.setOnClickListener(new View.OnClickListener() {
+        btnSwitchCamera.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 worker().getRtcEngine().switchCamera();
             }
         });
 
-        button3.setOnClickListener(new View.OnClickListener() {
+        btnMicrophoneMute.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 Object tag = v.getTag();
@@ -238,9 +281,9 @@ public class LiveRoomActivity extends BaseActivity implements AGEventHandler {
         });
     }
 
-    private void audienceUI(ImageView button1, ImageView button2, ImageView button3) {
-        button1.setTag(null);
-        button1.setOnClickListener(new View.OnClickListener() {
+    private void audienceUI() {
+        btnSwitchClientRole.setTag(null);
+        btnSwitchClientRole.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 Object tag = v.getTag();
@@ -251,11 +294,11 @@ public class LiveRoomActivity extends BaseActivity implements AGEventHandler {
                 }
             }
         });
-        button1.clearColorFilter();
-        button2.setVisibility(View.GONE);
-        button3.setTag(null);
-        button3.setVisibility(View.GONE);
-        button3.clearColorFilter();
+        btnSwitchClientRole.clearColorFilter();
+        btnSwitchCamera.setVisibility(View.GONE);
+        btnMicrophoneMute.setTag(null);
+        btnMicrophoneMute.setVisibility(View.GONE);
+        btnMicrophoneMute.clearColorFilter();
     }
 
     private void doConfigEngine(int cRole) {
@@ -271,6 +314,7 @@ public class LiveRoomActivity extends BaseActivity implements AGEventHandler {
 
     @Override
     protected void deInitUIandEvent() {
+        mHandler.removeCallbacksAndMessages(null);
         doLeaveChannel();
         event().removeEventHandler(this);
 
@@ -327,17 +371,14 @@ public class LiveRoomActivity extends BaseActivity implements AGEventHandler {
         log.debug("doSwitchToBroadcaster " + currentHostCount + " " + (uid & 0XFFFFFFFFL) + " " + broadcaster);
 
         if (broadcaster) {
-            doConfigEngine(Constants.CLIENT_ROLE_BROADCASTER);
+            doConfigEngine(io.agora.rtc.Constants.CLIENT_ROLE_BROADCASTER);
 
             new Handler().postDelayed(new Runnable() {
                 @Override
                 public void run() {
                     doRenderRemoteUi(uid);
 
-                    ImageView button1 = (ImageView) findViewById(R.id.btn_1);
-                    ImageView button2 = (ImageView) findViewById(R.id.btn_2);
-                    ImageView button3 = (ImageView) findViewById(R.id.btn_3);
-                    broadcasterUI(button1, button2, button3);
+                    broadcasterUI();
 
                     doShowButtons(false);
                 }
@@ -348,17 +389,14 @@ public class LiveRoomActivity extends BaseActivity implements AGEventHandler {
     }
 
     private void stopInteraction(final int currentHostCount, final int uid) {
-        doConfigEngine(Constants.CLIENT_ROLE_AUDIENCE);
+        doConfigEngine(io.agora.rtc.Constants.CLIENT_ROLE_AUDIENCE);
 
         new Handler().postDelayed(new Runnable() {
             @Override
             public void run() {
                 doRemoveRemoteUi(uid);
 
-                ImageView button1 = (ImageView) findViewById(R.id.btn_1);
-                ImageView button2 = (ImageView) findViewById(R.id.btn_2);
-                ImageView button3 = (ImageView) findViewById(R.id.btn_3);
-                audienceUI(button1, button2, button3);
+                audienceUI();
 
                 doShowButtons(false);
             }
@@ -438,17 +476,17 @@ public class LiveRoomActivity extends BaseActivity implements AGEventHandler {
                     log.debug("requestRemoteStreamType " + currentHostCount + " local " + (config().mUid & 0xFFFFFFFFL) + " " + (pair.getKey() & 0xFFFFFFFFL) + " " + pair.getValue().getHeight() + " " + pair.getValue().getWidth());
                     if (pair.getKey() != config().mUid && (highest == null || highest.getValue().getHeight() < pair.getValue().getHeight())) {
                         if (highest != null) {
-                            rtcEngine().setRemoteVideoStreamType(highest.getKey(), Constants.VIDEO_STREAM_LOW);
+                            rtcEngine().setRemoteVideoStreamType(highest.getKey(), io.agora.rtc.Constants.VIDEO_STREAM_LOW);
                             log.debug("setRemoteVideoStreamType switch highest VIDEO_STREAM_LOW " + currentHostCount + " " + (highest.getKey() & 0xFFFFFFFFL) + " " + highest.getValue().getWidth() + " " + highest.getValue().getHeight());
                         }
                         highest = pair;
                     } else if (pair.getKey() != config().mUid && (highest != null && highest.getValue().getHeight() >= pair.getValue().getHeight())) {
-                        rtcEngine().setRemoteVideoStreamType(pair.getKey(), Constants.VIDEO_STREAM_LOW);
+                        rtcEngine().setRemoteVideoStreamType(pair.getKey(), io.agora.rtc.Constants.VIDEO_STREAM_LOW);
                         log.debug("setRemoteVideoStreamType VIDEO_STREAM_LOW " + currentHostCount + " " + (pair.getKey() & 0xFFFFFFFFL) + " " + pair.getValue().getWidth() + " " + pair.getValue().getHeight());
                     }
                 }
                 if (highest != null && highest.getKey() != 0) {
-                    rtcEngine().setRemoteVideoStreamType(highest.getKey(), Constants.VIDEO_STREAM_HIGH);
+                    rtcEngine().setRemoteVideoStreamType(highest.getKey(), io.agora.rtc.Constants.VIDEO_STREAM_HIGH);
                     log.debug("setRemoteVideoStreamType VIDEO_STREAM_HIGH " + currentHostCount + " " + (highest.getKey() & 0xFFFFFFFFL) + " " + highest.getValue().getWidth() + " " + highest.getValue().getHeight());
                 }
             }
@@ -497,7 +535,7 @@ public class LiveRoomActivity extends BaseActivity implements AGEventHandler {
         for (int i = 0; i < sizeLimit; i++) {
             int uid = mGridVideoViewContainer.getItem(i).mUid;
             if (config().mUid != uid) {
-                rtcEngine().setRemoteVideoStreamType(uid, Constants.VIDEO_STREAM_HIGH);
+                rtcEngine().setRemoteVideoStreamType(uid, io.agora.rtc.Constants.VIDEO_STREAM_HIGH);
                 log.debug("setRemoteVideoStreamType VIDEO_STREAM_HIGH " + mUidsList.size() + " " + (uid & 0xFFFFFFFFL));
             }
         }

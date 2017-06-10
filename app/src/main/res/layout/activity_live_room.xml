@@ -81,7 +81,7 @@
             android:paddingLeft="16dp"
             android:paddingRight="16dp"
             android:paddingTop="32dp"
-            android:text="已匹配 1/4"
+            android:text="正在匹配 ..."
             android:textColor="@android:color/white"
             android:textSize="18sp" />
 
