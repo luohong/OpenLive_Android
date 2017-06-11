@@ -1,4 +1,4 @@
-package qsbk.app.play.ui;
+package qsbk.app.play.adapter;
 
 import android.app.Activity;
 import android.content.Context;
@@ -23,6 +23,8 @@ import java.util.Iterator;
 import qsbk.app.play.R;
 import qsbk.app.play.model.ConstantApp;
 import qsbk.app.play.model.VideoStatusData;
+import qsbk.app.play.widget.OnDoubleTapListener;
+import qsbk.app.play.widget.VideoViewEventListener;
 
 public class GridVideoViewContainerAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
     private final static Logger log = LoggerFactory.getLogger(GridVideoViewContainerAdapter.class);

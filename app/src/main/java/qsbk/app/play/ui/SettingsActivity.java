@@ -10,6 +10,7 @@ import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
 import qsbk.app.play.R;
+import qsbk.app.play.adapter.VideoProfileAdapter;
 import qsbk.app.play.model.ConstantApp;
 
 public class SettingsActivity extends AppCompatActivity {

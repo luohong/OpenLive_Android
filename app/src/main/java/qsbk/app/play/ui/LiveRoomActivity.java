@@ -1,5 +1,7 @@
 package qsbk.app.play.ui;
 
+import android.app.AlertDialog;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.PorterDuff;
@@ -7,7 +9,9 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.preference.PreferenceManager;
 import android.support.v7.widget.GridLayoutManager;
+import android.support.v7.widget.LinearLayoutManager;
 import android.support.v7.widget.RecyclerView;
+import android.text.TextUtils;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -17,6 +21,7 @@ import android.view.ViewStub;
 import android.widget.ImageView;
 import android.widget.RelativeLayout;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import com.blankj.utilcode.util.PhoneUtils;
 import com.google.gson.Gson;
@@ -25,6 +30,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 import io.agora.rtc.RtcEngine;
@@ -36,13 +42,23 @@ import okhttp3.WebSocket;
 import okhttp3.WebSocketListener;
 import okio.ByteString;
 import qsbk.app.play.R;
+import qsbk.app.play.adapter.AnswerViewAdapter;
+import qsbk.app.play.adapter.SmallVideoViewAdapter;
+import qsbk.app.play.adapter.WordsViewAdapter;
+import qsbk.app.play.common.Constants;
 import qsbk.app.play.model.AGEventHandler;
 import qsbk.app.play.model.ConstantApp;
 import qsbk.app.play.model.VideoStatusData;
 import qsbk.app.play.websocket.model.BaseMessage;
-import qsbk.app.play.common.Constants;
 import qsbk.app.play.websocket.model.MatchProgressMessage;
 import qsbk.app.play.websocket.model.PerformMessage;
+import qsbk.app.play.websocket.model.PerformTopicAnswerMessage;
+import qsbk.app.play.websocket.model.PerformTopicAnswerResultMessage;
+import qsbk.app.play.websocket.model.PerformTopicMessage;
+import qsbk.app.play.websocket.model.PerformTopicSelectedMessage;
+import qsbk.app.play.widget.GridVideoViewContainer;
+import qsbk.app.play.widget.OnItemClickListener;
+import qsbk.app.play.widget.VideoViewEventListener;
 
 public class LiveRoomActivity extends BaseActivity implements AGEventHandler {
 
@@ -61,7 +77,13 @@ public class LiveRoomActivity extends BaseActivity implements AGEventHandler {
     private ImageView btnSwitchClientRole;
     private ImageView btnSwitchCamera;
     private ImageView btnMicrophoneMute;
+
     private Handler mHandler;
+
+    private WordsViewAdapter mWordsViewAdapter;
+    private AnswerViewAdapter mAnswerViewAdapter;
+
+    private WebSocket mWebSocket;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -163,12 +185,11 @@ public class LiveRoomActivity extends BaseActivity implements AGEventHandler {
                 .build();
         //new 一个websocket调用对象并建立连接
         client.newWebSocket(request, new WebSocketListener() {
-            WebSocket webSocket = null;
 
             @Override
             public void onOpen(final WebSocket webSocket, Response response) {
                 //保存引用，用于后续操作
-                this.webSocket = webSocket;
+                mWebSocket = webSocket;
                 //打印一些内容
                 Log.d("websocket", "client onOpen");
                 Log.d("websocket", "client request header:" + response.request().headers());
@@ -199,7 +220,43 @@ public class LiveRoomActivity extends BaseActivity implements AGEventHandler {
                                 case Constants.MessageType.PERFORM:
                                     PerformMessage performMsg = mGson.fromJson(message, PerformMessage.class);
 
-                                    doSwitchToBroadcaster(performMsg.who.equals(uid));
+                                    if (!TextUtils.isEmpty(performMsg.who)) {
+                                        doSwitchToBroadcaster(performMsg.who.equals(uid));
+                                    }
+
+                                    if (performMsg.topics != null) {
+                                        final String[] topics = performMsg.topics.toArray(new String[performMsg.topics.size()]);
+                                        AlertDialog.Builder builder = new AlertDialog.Builder(LiveRoomActivity.this);
+
+                                        builder.setTitle("ok")
+                                                .setIcon(R.drawable.ic_launcher)
+                                                .setItems(topics, new DialogInterface.OnClickListener() {
+
+                                                    @Override
+                                                    public void onClick(DialogInterface dialog, int which) {
+                                                        dialog.dismiss();
+
+                                                        String topic = topics[which];
+                                                        Toast.makeText(LiveRoomActivity.this, topic, Toast.LENGTH_SHORT).show();
+                                                        Log.i("abc", "i" + which);
+
+                                                        PerformTopicSelectedMessage topicMsg = new PerformTopicSelectedMessage(topic);
+                                                        webSocket.send(mGson.toJson(topicMsg));
+                                                    }
+                                                }).show();
+                                    }
+                                    break;
+                                case Constants.MessageType.PERFORM_TOPIC:
+                                    PerformTopicMessage performTopicMsg = mGson.fromJson(message, PerformTopicMessage.class);
+                                    bindToAnswerView(performTopicMsg.wordCount);
+                                    bindToWordsView(performTopicMsg.words);
+                                    break;
+                                case Constants.MessageType.PERFORM_TOPIC_ANSWER_RESULT:
+                                    PerformTopicAnswerResultMessage resultMessage = mGson.fromJson(message, PerformTopicAnswerResultMessage.class);
+                                    Toast.makeText(LiveRoomActivity.this, "答案 [" +  resultMessage.answer + "] " + (resultMessage.result ? "正确" : "不正确"), Toast.LENGTH_SHORT).show();
+                                    break;
+                                case Constants.MessageType.GAME_OVER:
+                                    Toast.makeText(LiveRoomActivity.this, "游戏结束", Toast.LENGTH_SHORT).show();
                                     break;
                             }
                         }
@@ -237,6 +294,74 @@ public class LiveRoomActivity extends BaseActivity implements AGEventHandler {
         });
         // Trigger shutdown of the dispatcher's executor so this process can exit cleanly.
 //        client.dispatcher().executorService().shutdown();
+    }
+
+    private void bindToAnswerView(int wordCount) {
+        RecyclerView recycler = (RecyclerView) findViewById(R.id.answer_view_container);
+
+        boolean create = false;
+
+        if (mAnswerViewAdapter == null) {
+            create = true;
+            mAnswerViewAdapter = new AnswerViewAdapter(this, wordCount, new OnItemClickListener() {
+
+                @Override
+                public void onItemClick(View itemView, String word, int position) {
+                    if (!TextUtils.isEmpty(word) && mWordsViewAdapter != null) {
+                        mWordsViewAdapter.notifyItemSelected(word);
+                    }
+                }
+
+            });
+//            mAnswerViewAdapter.setHasStableIds(true);
+        }
+        recycler.setHasFixedSize(true);
+
+        recycler.setLayoutManager(new LinearLayoutManager(this, GridLayoutManager.HORIZONTAL, false));
+        recycler.setAdapter(mAnswerViewAdapter);
+
+        recycler.setDrawingCacheEnabled(true);
+        recycler.setDrawingCacheQuality(View.DRAWING_CACHE_QUALITY_AUTO);
+
+        if (!create) {
+            mAnswerViewAdapter.notifyUiChanged(wordCount);
+        }
+        recycler.setVisibility(View.VISIBLE);
+    }
+
+    private void bindToWordsView(List<String> words) {
+        RecyclerView recycler = (RecyclerView) findViewById(R.id.words_view_container);
+
+        boolean create = false;
+
+        if (mWordsViewAdapter == null) {
+            create = true;
+            mWordsViewAdapter = new WordsViewAdapter(this, words, new OnItemClickListener() {
+
+                @Override
+                public void onItemClick(View itemView, String word, int position) {
+                    String answer = mAnswerViewAdapter.notifyItemSelected(word);
+                    if (!TextUtils.isEmpty(answer) && mWebSocket != null) {
+                        PerformTopicAnswerMessage answerMessage = new PerformTopicAnswerMessage(answer);
+                        mWebSocket.send(mGson.toJson(answerMessage));
+                    }
+                }
+
+            });
+            mWordsViewAdapter.setHasStableIds(true);
+        }
+        recycler.setHasFixedSize(true);
+
+        recycler.setLayoutManager(new GridLayoutManager(this, 3, GridLayoutManager.HORIZONTAL, false));
+        recycler.setAdapter(mWordsViewAdapter);
+
+        recycler.setDrawingCacheEnabled(true);
+        recycler.setDrawingCacheQuality(View.DRAWING_CACHE_QUALITY_AUTO);
+
+        if (!create) {
+            mWordsViewAdapter.notifyUiChanged(words);
+        }
+        recycler.setVisibility(View.VISIBLE);
     }
 
     private void broadcasterUI() {

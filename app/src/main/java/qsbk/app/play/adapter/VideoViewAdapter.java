@@ -1,4 +1,4 @@
-package qsbk.app.play.ui;
+package qsbk.app.play.adapter;
 
 import android.app.Activity;
 import android.content.Context;
@@ -20,6 +20,8 @@ import java.util.HashMap;
 
 import qsbk.app.play.R;
 import qsbk.app.play.model.VideoStatusData;
+import qsbk.app.play.widget.OnDoubleTapListener;
+import qsbk.app.play.widget.VideoViewEventListener;
 
 public abstract class VideoViewAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
 

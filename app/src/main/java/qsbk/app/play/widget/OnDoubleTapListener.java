@@ -1,4 +1,4 @@
-package qsbk.app.play.ui;
+package qsbk.app.play.widget;
 
 import android.content.Context;
 import android.view.GestureDetector;

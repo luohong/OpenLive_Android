@@ -1,4 +1,4 @@
-package qsbk.app.play.ui;
+package qsbk.app.play.adapter;
 
 import android.content.Context;
 import android.util.DisplayMetrics;
@@ -11,6 +11,7 @@ import org.slf4j.LoggerFactory;
 import java.util.HashMap;
 
 import qsbk.app.play.model.VideoStatusData;
+import qsbk.app.play.widget.VideoViewEventListener;
 
 public class SmallVideoViewAdapter extends VideoViewAdapter {
     private final static Logger log = LoggerFactory.getLogger(SmallVideoViewAdapter.class);

@@ -1,4 +1,4 @@
-package qsbk.app.play.ui;
+package qsbk.app.play.widget;
 
 import android.content.Context;
 import android.support.annotation.Nullable;
@@ -10,6 +10,7 @@ import android.view.SurfaceView;
 
 import java.util.HashMap;
 
+import qsbk.app.play.adapter.GridVideoViewContainerAdapter;
 import qsbk.app.play.model.VideoStatusData;
 
 public class GridVideoViewContainer extends RecyclerView {
