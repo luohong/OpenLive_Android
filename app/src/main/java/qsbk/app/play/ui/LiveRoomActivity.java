@@ -23,7 +23,8 @@ import android.widget.RelativeLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import com.blankj.utilcode.util.PhoneUtils;
+import qsbk.app.play.utils.PhoneUtils;
+
 import com.google.gson.Gson;
 
 import org.slf4j.Logger;
@@ -173,12 +174,12 @@ public class LiveRoomActivity extends BaseActivity implements AGEventHandler {
 
     private void connectWebsocket() {
         //新建client
-        OkHttpClient client = new OkHttpClient.Builder()
-                .readTimeout(1000,  TimeUnit.MILLISECONDS)
+        final OkHttpClient client = new OkHttpClient.Builder()
+                .readTimeout(1000, TimeUnit.MILLISECONDS)
                 .connectTimeout(5000, TimeUnit.MILLISECONDS)
                 .build();
         //构造request对象
-        final String uid = PhoneUtils.getIMEI();
+        final String uid = PhoneUtils.getAndroidId();
         Request request = new Request.Builder()
 //                .url("ws://172.16.0.109:8080/Play/websocket?uid=" + uid)
                 .url("ws://192.168.199.239:8080/Play/websocket?uid=" + uid)
@@ -241,7 +242,7 @@ public class LiveRoomActivity extends BaseActivity implements AGEventHandler {
                                                         Log.i("abc", "i" + which);
 
                                                         PerformTopicSelectedMessage topicMsg = new PerformTopicSelectedMessage(topic);
-                                                        webSocket.send(mGson.toJson(topicMsg));
+                                                        mWebSocket.send(mGson.toJson(topicMsg));
                                                     }
                                                 }).show();
                                     }
@@ -253,10 +254,11 @@ public class LiveRoomActivity extends BaseActivity implements AGEventHandler {
                                     break;
                                 case Constants.MessageType.PERFORM_TOPIC_ANSWER_RESULT:
                                     PerformTopicAnswerResultMessage resultMessage = mGson.fromJson(message, PerformTopicAnswerResultMessage.class);
-                                    Toast.makeText(LiveRoomActivity.this, "答案 [" +  resultMessage.answer + "] " + (resultMessage.result ? "正确" : "不正确"), Toast.LENGTH_SHORT).show();
+                                    Toast.makeText(LiveRoomActivity.this, "答案 [" + resultMessage.answer + "] " + (resultMessage.result ? "正确" : "不正确"), Toast.LENGTH_SHORT).show();
                                     break;
                                 case Constants.MessageType.GAME_OVER:
                                     Toast.makeText(LiveRoomActivity.this, "游戏结束", Toast.LENGTH_SHORT).show();
+                                    finish();
                                     break;
                             }
                         }
@@ -277,6 +279,8 @@ public class LiveRoomActivity extends BaseActivity implements AGEventHandler {
                 //打印一些内容
                 Log.d("websocket", "client onClose");
                 Log.d("websocket", "code:" + code + " reason:" + reason);
+                // Trigger shutdown of the dispatcher's executor so this process can exit cleanly.
+                client.dispatcher().executorService().shutdown();
             }
 
             @Override
@@ -292,8 +296,6 @@ public class LiveRoomActivity extends BaseActivity implements AGEventHandler {
 //                webSocket.close(1000, "Goodbye, World!");
             }
         });
-        // Trigger shutdown of the dispatcher's executor so this process can exit cleanly.
-//        client.dispatcher().executorService().shutdown();
     }
 
     private void bindToAnswerView(int wordCount) {
@@ -327,6 +329,8 @@ public class LiveRoomActivity extends BaseActivity implements AGEventHandler {
             mAnswerViewAdapter.notifyUiChanged(wordCount);
         }
         recycler.setVisibility(View.VISIBLE);
+
+        findViewById(R.id.line_under_answer).setVisibility(View.VISIBLE);
     }
 
     private void bindToWordsView(List<String> words) {
@@ -717,5 +721,13 @@ public class LiveRoomActivity extends BaseActivity implements AGEventHandler {
         }
         recycler.setVisibility(View.VISIBLE);
         mSmallVideoViewDock.setVisibility(View.VISIBLE);
+    }
+
+    @Override
+    public void finish() {
+        if (mWebSocket != null) {
+            mWebSocket.close(1001, "Going away");
+        }
+        super.finish();
     }
 }
