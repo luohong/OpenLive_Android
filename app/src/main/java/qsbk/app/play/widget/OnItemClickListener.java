@@ -8,6 +8,6 @@ import android.view.View;
 
 public interface OnItemClickListener {
 
-    void onItemClick(View itemView, String word, int position);
+    boolean onItemClick(View itemView, String word, int position);
 
 }

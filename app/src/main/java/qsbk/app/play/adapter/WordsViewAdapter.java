@@ -75,11 +75,15 @@ public class WordsViewAdapter extends RecyclerView.Adapter<WordsViewAdapter.View
                 public void onClick(View v) {
                     int position = getLayoutPosition();
 
-                    text.setSelected(!text.isSelected());
                     String word = mItems.get(position);
-                    mSelectedMap.put(word, text.isSelected());
+
+                    boolean filtered = false;
                     if (mOnItemClickListener != null) {
-                        mOnItemClickListener.onItemClick(itemView, word, position);
+                        filtered = mOnItemClickListener.onItemClick(itemView, word, position);
+                    }
+                    if (!filtered) {
+                        mSelectedMap.put(word, text.isSelected());
+                        text.setSelected(!text.isSelected());
                     }
                 }
             });

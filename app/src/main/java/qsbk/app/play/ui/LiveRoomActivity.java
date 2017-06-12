@@ -51,6 +51,7 @@ import qsbk.app.play.model.AGEventHandler;
 import qsbk.app.play.model.ConstantApp;
 import qsbk.app.play.model.VideoStatusData;
 import qsbk.app.play.websocket.model.BaseMessage;
+import qsbk.app.play.websocket.model.GameStartMessage;
 import qsbk.app.play.websocket.model.MatchProgressMessage;
 import qsbk.app.play.websocket.model.PerformMessage;
 import qsbk.app.play.websocket.model.PerformTopicAnswerMessage;
@@ -85,6 +86,7 @@ public class LiveRoomActivity extends BaseActivity implements AGEventHandler {
     private AnswerViewAdapter mAnswerViewAdapter;
 
     private WebSocket mWebSocket;
+    private int mRoomId;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -162,10 +164,10 @@ public class LiveRoomActivity extends BaseActivity implements AGEventHandler {
             audienceUI();
         }
 
-        worker().joinChannel(roomName, config().mUid);
-
-        TextView textRoomName = (TextView) findViewById(R.id.room_name);
-        textRoomName.setText(roomName);
+//        worker().joinChannel(roomName, config().mUid);
+//
+//        TextView textRoomName = (TextView) findViewById(R.id.room_name);
+//        textRoomName.setText(roomName);
 
         tvMatchProgress = (TextView) findViewById(R.id.tv_match_progress);
 
@@ -181,8 +183,8 @@ public class LiveRoomActivity extends BaseActivity implements AGEventHandler {
         //构造request对象
         final String uid = PhoneUtils.getAndroidId();
         Request request = new Request.Builder()
-//                .url("ws://172.16.0.109:8080/Play/websocket?uid=" + uid)
-                .url("ws://192.168.199.239:8080/Play/websocket?uid=" + uid)
+                .url("ws://172.16.0.109:8080/Play/websocket?uid=" + uid)
+//                .url("ws://192.168.199.239:8080/Play/websocket?uid=" + uid)
                 .build();
         //new 一个websocket调用对象并建立连接
         client.newWebSocket(request, new WebSocketListener() {
@@ -216,7 +218,14 @@ public class LiveRoomActivity extends BaseActivity implements AGEventHandler {
                                     tvMatchProgress.setText(String.format("已匹配 %d/%d", progressMsg.progress, progressMsg.total));
                                     break;
                                 case Constants.MessageType.GAME_START:
+                                    GameStartMessage startMessage = mGson.fromJson(message, GameStartMessage.class);
+                                    mRoomId = startMessage.roomId;
                                     tvMatchProgress.setVisibility(View.GONE);
+
+                                    worker().joinChannel(String.valueOf(mRoomId), config().mUid);
+
+                                    TextView textRoomName = (TextView) findViewById(R.id.room_name);
+                                    textRoomName.setText(String.format("房间号:%s", mRoomId));
                                     break;
                                 case Constants.MessageType.PERFORM:
                                     PerformMessage performMsg = mGson.fromJson(message, PerformMessage.class);
@@ -241,7 +250,7 @@ public class LiveRoomActivity extends BaseActivity implements AGEventHandler {
                                                         Toast.makeText(LiveRoomActivity.this, topic, Toast.LENGTH_SHORT).show();
                                                         Log.i("abc", "i" + which);
 
-                                                        PerformTopicSelectedMessage topicMsg = new PerformTopicSelectedMessage(topic);
+                                                        PerformTopicSelectedMessage topicMsg = new PerformTopicSelectedMessage(mRoomId, topic);
                                                         mWebSocket.send(mGson.toJson(topicMsg));
                                                     }
                                                 }).show();
@@ -308,10 +317,11 @@ public class LiveRoomActivity extends BaseActivity implements AGEventHandler {
             mAnswerViewAdapter = new AnswerViewAdapter(this, wordCount, new OnItemClickListener() {
 
                 @Override
-                public void onItemClick(View itemView, String word, int position) {
+                public boolean onItemClick(View itemView, String word, int position) {
                     if (!TextUtils.isEmpty(word) && mWordsViewAdapter != null) {
                         mWordsViewAdapter.notifyItemSelected(word);
                     }
+                    return true;
                 }
 
             });
@@ -343,12 +353,16 @@ public class LiveRoomActivity extends BaseActivity implements AGEventHandler {
             mWordsViewAdapter = new WordsViewAdapter(this, words, new OnItemClickListener() {
 
                 @Override
-                public void onItemClick(View itemView, String word, int position) {
+                public boolean onItemClick(View itemView, String word, int position) {
                     String answer = mAnswerViewAdapter.notifyItemSelected(word);
-                    if (!TextUtils.isEmpty(answer) && mWebSocket != null) {
-                        PerformTopicAnswerMessage answerMessage = new PerformTopicAnswerMessage(answer);
-                        mWebSocket.send(mGson.toJson(answerMessage));
+                    boolean isNotEmpty = !TextUtils.isEmpty(answer);
+                    if (isNotEmpty) {
+                        if (mWebSocket != null) {
+                            PerformTopicAnswerMessage answerMessage = new PerformTopicAnswerMessage(mRoomId, answer);
+                            mWebSocket.send(mGson.toJson(answerMessage));
+                        }
                     }
+                    return isNotEmpty;
                 }
 
             });

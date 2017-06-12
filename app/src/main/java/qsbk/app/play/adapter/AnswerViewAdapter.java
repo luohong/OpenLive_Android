@@ -54,11 +54,16 @@ public class AnswerViewAdapter extends RecyclerView.Adapter<AnswerViewAdapter.Vi
     private void initItems(int wordCount) {
         mItems = new ArrayList<>(wordCount);
         for (int i = 0; i < wordCount; i++) {
-            mItems.add(null);
+            mItems.add("");
         }
     }
 
     public String notifyItemSelected(String word) {
+        String answer = "";
+        if (!mItems.contains("")) {
+            return answer;// 文字已满
+        }
+
         int position = -1;
         if (mItems.contains(word)) {
             position = mItems.indexOf(word);
@@ -76,17 +81,16 @@ public class AnswerViewAdapter extends RecyclerView.Adapter<AnswerViewAdapter.Vi
         if (position >= 0) {
             notifyItemChanged(position);
         }
-        String answer = "";
-        for (int i = 0; i < mItems.size(); i++) {
-            String item = mItems.get(i);
-            if (TextUtils.isEmpty(item)) {
-                answer = null;
-                break;
-            } else {
+
+        if (mItems.contains("")) {
+            return answer;
+        } else {
+            for (int i = 0; i < mItems.size(); i++) {
+                String item = mItems.get(i);
                 answer += item;
             }
+            return answer;
         }
-        return answer;
     }
 
     public class ViewHolder extends RecyclerView.ViewHolder {
