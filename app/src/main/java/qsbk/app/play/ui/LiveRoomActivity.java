@@ -6,6 +6,7 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.PorterDuff;
 import android.os.Bundle;
+import android.os.CountDownTimer;
 import android.os.Handler;
 import android.preference.PreferenceManager;
 import android.support.v7.widget.GridLayoutManager;
@@ -23,6 +24,7 @@ import android.widget.RelativeLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import qsbk.app.play.AppController;
 import qsbk.app.play.utils.PhoneUtils;
 
 import com.google.gson.Gson;
@@ -73,20 +75,22 @@ public class LiveRoomActivity extends BaseActivity implements AGEventHandler {
     private final HashMap<Integer, SurfaceView> mUidsList = new HashMap<>(); // uid = 0 || uid == EngineConfig.mUid
 
     private TextView tvMatchProgress;
+    private TextView tvCountDown;
 
     private Gson mGson = new Gson();
 
     private ImageView btnSwitchClientRole;
     private ImageView btnSwitchCamera;
+
     private ImageView btnMicrophoneMute;
 
     private Handler mHandler;
-
     private WordsViewAdapter mWordsViewAdapter;
-    private AnswerViewAdapter mAnswerViewAdapter;
 
+    private AnswerViewAdapter mAnswerViewAdapter;
     private WebSocket mWebSocket;
     private int mRoomId;
+    private CountDownTimer mCountDownTimer;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -123,8 +127,6 @@ public class LiveRoomActivity extends BaseActivity implements AGEventHandler {
         if (cRole == 0) {
             throw new RuntimeException("Should not reach here");
         }
-
-        String roomName = i.getStringExtra(ConstantApp.ACTION_KEY_ROOM_NAME);
 
         doConfigEngine(cRole);
 
@@ -164,12 +166,14 @@ public class LiveRoomActivity extends BaseActivity implements AGEventHandler {
             audienceUI();
         }
 
+//        String roomName = i.getStringExtra(ConstantApp.ACTION_KEY_ROOM_NAME);
 //        worker().joinChannel(roomName, config().mUid);
 //
 //        TextView textRoomName = (TextView) findViewById(R.id.room_name);
 //        textRoomName.setText(roomName);
 
         tvMatchProgress = (TextView) findViewById(R.id.tv_match_progress);
+        tvCountDown = (TextView) findViewById(R.id.tv_count_down);
 
         connectWebsocket();
     }
@@ -255,6 +259,8 @@ public class LiveRoomActivity extends BaseActivity implements AGEventHandler {
                                                     }
                                                 }).show();
                                     }
+
+                                    startCountDown(performMsg.count);
                                     break;
                                 case Constants.MessageType.PERFORM_TOPIC:
                                     PerformTopicMessage performTopicMsg = mGson.fromJson(message, PerformTopicMessage.class);
@@ -305,6 +311,48 @@ public class LiveRoomActivity extends BaseActivity implements AGEventHandler {
 //                webSocket.close(1000, "Goodbye, World!");
             }
         });
+    }
+
+    private void startCountDown(long countDown) {
+        if (mCountDownTimer != null) {
+            mCountDownTimer.cancel();
+            mCountDownTimer = null;
+        }
+
+        // 此处必须每次重新new一个实例，否则下一局游戏的倒计时开始时间 依然是 刚进直播间看到的那一局的倒计时开始时间
+        mCountDownTimer = new CountDownTimer(countDown * 1000 + 500, 500) {
+            @Override
+            public void onTick(long millisUntilFinished) {
+                long count = millisUntilFinished / 1000;
+                if (count >= 0 && count <= 10) {
+                    if (count % 2 == 0) {
+                        tvCountDown.setTextColor(AppController.instance().getResources().getColor(android.R.color.holo_red_light));
+                    } else {
+                        tvCountDown.setTextColor(AppController.instance().getResources().getColor(android.R.color.white));
+                    }
+                } else {
+                    tvCountDown.setTextColor(AppController.instance().getResources().getColor(android.R.color.white));
+                }
+                long minute = count / 60;
+                long second = count % 60;
+                StringBuilder builder = new StringBuilder();
+                if (minute < 10) {
+                    builder.append(0);
+                }
+                builder.append(minute).append(':');
+                if (second < 10) {
+                    builder.append(0);
+                }
+                builder.append(second);
+                tvCountDown.setText(builder.toString());
+            }
+
+            @Override
+            public void onFinish() {
+                tvCountDown.setText("00:00");
+            }
+        };
+        mCountDownTimer.start();
     }
 
     private void bindToAnswerView(int wordCount) {
